@@ -1,6 +1,6 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
-import csv
+from tkinter import ttk, messagebox, scrolledtext
+import random, csv, os
 
 # -------------------- Data Structures --------------------
 class Investor:
@@ -9,20 +9,19 @@ class Investor:
         self.name = name
         self.ipo = ipo
         self.shares = shares
-        self.next = None
+        self.next = None  # For linked list
 
 class Queue:
     def __init__(self): self.items = []
     def enqueue(self, x): self.items.append(x)
-    def dequeue(self): return self.items.pop(0) if not self.is_empty() else None
+    def dequeue(self): return self.items.pop(0) if self.items else None
     def is_empty(self): return len(self.items) == 0
     def get_all(self): return self.items
 
 class Stack:
     def __init__(self): self.items = []
     def push(self, x): self.items.append(x)
-    def pop(self): return self.items.pop() if not self.is_empty() else None
-    def is_empty(self): return len(self.items) == 0
+    def pop(self): return self.items.pop() if self.items else None
     def get_all(self): return self.items[::-1]
 
 class LinkedList:
@@ -41,167 +40,172 @@ class LinkedList:
             temp = temp.next
         return res
 
-# -------------------- Main App --------------------
-class IPOAppAutoValidation:
+# -------------------- IPO App --------------------
+class IPOApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("🌟 IPO Simulator (Auto Validation) 🌟")
-        self.root.geometry("950x600")
-        self.root.configure(bg="#1f2937")
+        self.root.title("IPO Subscription Simulator")
+        self.root.geometry("900x600")
+        self.root.config(bg="#f0f4f8")
 
-        # Data structures
+        self.api_key = "YOUR_API_KEY_HERE"
+
+        # DSA Structures
         self.queue = Queue()
         self.rejected = Stack()
         self.allottees = LinkedList()
 
+        self.ipo_list = ["TechNova Ltd", "GreenEnergy Co", "FoodiesHub", "MediCore Pharma", "AquaPure Ltd"]
+
+        self.load_data()
         self.setup_ui()
 
+    # -------------------- UI --------------------
     def setup_ui(self):
-        title = tk.Label(self.root, text="IPO Subscription Simulator", font=("Helvetica", 20, "bold"), bg="#1f2937", fg="#facc15")
-        title.pack(pady=15)
+        tk.Label(self.root, text="IPO Subscription Simulator", font=("Helvetica", 20, "bold"), fg="#0f172a", bg="#f0f4f8").pack(pady=10)
 
-        # Form Frame
-        form_frame = tk.Frame(self.root, bg="#1f2937")
-        form_frame.pack(pady=10)
+        form = tk.Frame(self.root, bg="#f0f4f8")
+        form.pack(pady=10)
 
-        labels = ["Investor ID:", "Name:", "Select IPO:", "Shares:"]
-        self.entries = []
+        tk.Label(form, text="Investor ID:").grid(row=0, column=0, padx=5, pady=2, sticky='w')
+        tk.Label(form, text="Name:").grid(row=1, column=0, padx=5, pady=2, sticky='w')
+        tk.Label(form, text="Select IPO:").grid(row=2, column=0, padx=5, pady=2, sticky='w')
+        tk.Label(form, text="Shares (Lot-wise, 50 per lot):").grid(row=3, column=0, padx=5, pady=2, sticky='w')
 
-        for i, text in enumerate(labels):
-            tk.Label(form_frame, text=text, bg="#1f2937", fg="#fef3c7", font=("Arial", 12)).grid(row=i, column=0, sticky="w", padx=5, pady=3)
-
-        self.entry_id = tk.Entry(form_frame)
-        self.entry_name = tk.Entry(form_frame)
-        self.ipo_choice = ttk.Combobox(form_frame, values=["TechNova Ltd", "GreenEnergy Co", "FoodiesHub", "MediCore Pharma"], state="readonly")
+        self.entry_id = tk.Entry(form)
+        self.entry_name = tk.Entry(form)
+        self.ipo_choice = ttk.Combobox(form, values=self.ipo_list, state="readonly")
         self.ipo_choice.current(0)
-        self.entry_shares = tk.Entry(form_frame)
+        self.entry_shares = tk.Entry(form)
 
-        self.entries = [self.entry_id, self.entry_name, self.ipo_choice, self.entry_shares]
+        self.entry_id.grid(row=0, column=1, padx=5, pady=2)
+        self.entry_name.grid(row=1, column=1, padx=5, pady=2)
+        self.ipo_choice.grid(row=2, column=1, padx=5, pady=2)
+        self.entry_shares.grid(row=3, column=1, padx=5, pady=2)
 
-        for i, e in enumerate(self.entries):
-            e.grid(row=i, column=1, padx=5, pady=3)
+        tk.Button(form, text="Apply for IPO", command=self.apply_ipo, bg="#2563eb", fg="white").grid(row=4, column=0, columnspan=2, pady=6)
+        tk.Button(form, text="Process All Applications", command=self.process_all, bg="#22c55e", fg="white").grid(row=5, column=0, columnspan=2, pady=4)
+        tk.Button(form, text="Reset", command=self.reset_all, bg="#ef4444", fg="white").grid(row=6, column=0, columnspan=2, pady=4)
 
-        # Buttons Frame
-        btn_frame = tk.Frame(self.root, bg="#1f2937")
-        btn_frame.pack(pady=10)
+        # AI Assistant
+        ai_frame = tk.LabelFrame(self.root, text="AI Assistant", bg="#f0f4f8")
+        ai_frame.pack(pady=10, fill='both', expand=True)
+        self.ai_box = scrolledtext.ScrolledText(ai_frame, height=6)
+        self.ai_box.pack(expand=True, fill='both', padx=5, pady=5)
+        tk.Button(ai_frame, text="Ask AI", command=self.ai_response, bg="#f97316", fg="white").pack(pady=4)
 
-        btn_config = {"bg": "#f59e0b", "fg": "#1f2937", "font": ("Arial", 11, "bold"), "width": 20, "bd": 0, "activebackground": "#fbbf24"}
-
-        tk.Button(btn_frame, text="Apply for IPO", command=self.apply_ipo, **btn_config).grid(row=0, column=0, padx=5)
-        tk.Button(btn_frame, text="Process All", command=self.process_all, **btn_config).grid(row=0, column=1, padx=5)
-        tk.Button(btn_frame, text="Reset All", command=self.reset_all, **btn_config).grid(row=0, column=2, padx=5)
-        tk.Button(btn_frame, text="Export CSV", command=self.export_csv, **btn_config).grid(row=0, column=3, padx=5)
-
-        # Notebook
+        # Tabs
         self.tabs = ttk.Notebook(self.root)
-        self.tabs.pack(expand=True, fill="both", padx=10, pady=10)
+        self.tabs.pack(expand=True, fill='both')
 
         self.tab_queue = ttk.Frame(self.tabs)
         self.tab_allot = ttk.Frame(self.tabs)
         self.tab_reject = ttk.Frame(self.tabs)
 
-        self.tabs.add(self.tab_queue, text="Pending Queue")
-        self.tabs.add(self.tab_allot, text="Allottees")
-        self.tabs.add(self.tab_reject, text="Rejected")
+        self.tabs.add(self.tab_queue, text='Pending Queue')
+        self.tabs.add(self.tab_allot, text='Allottees')
+        self.tabs.add(self.tab_reject, text='Rejected')
 
-        self.table_queue = self.create_table(self.tab_queue, ["ID", "Name", "IPO", "Shares"], "#fef3c7")
-        self.table_allot = self.create_table(self.tab_allot, ["ID", "Name", "IPO", "Shares"], "#bbf7d0")
-        self.table_reject = self.create_table(self.tab_reject, ["ID", "Name", "IPO", "Shares"], "#fecaca")
+        self.table_queue = self.create_table(self.tab_queue, ["ID", "Name", "IPO", "Shares"])
+        self.table_allot = self.create_table(self.tab_allot, ["ID", "Name", "IPO", "Shares"])
+        self.table_reject = self.create_table(self.tab_reject, ["ID", "Name", "IPO", "Shares"])
 
-        # IPO Info Panel
-        info_frame = tk.Frame(self.root, bg="#1f2937")
-        info_frame.pack(fill="x", padx=10, pady=5)
-        tk.Label(info_frame, text="IPO Info Panel", font=("Arial", 12, "bold"), bg="#1f2937", fg="#fef3c7").pack(anchor="w")
-        self.ipo_info = tk.Label(info_frame, text="Select an IPO to see details...", bg="#1f2937", fg="#fef3c7", font=("Arial", 11))
-        self.ipo_info.pack(anchor="w")
-        self.ipo_choice.bind("<<ComboboxSelected>>", self.update_ipo_info)
+        self.refresh_tables()
 
-    def create_table(self, parent, columns, color):
-        table = ttk.Treeview(parent, columns=columns, show="headings", selectmode="browse")
-        for c in columns:
+    def create_table(self, parent, cols):
+        table = ttk.Treeview(parent, columns=cols, show="headings")
+        for c in cols:
             table.heading(c, text=c)
-            table.column(c, width=140)
-        table.pack(expand=True, fill="both", padx=5, pady=5)
-        table.tag_configure("row_color", background=color)
+            table.column(c, width=150)
+        table.pack(expand=True, fill='both', padx=10, pady=10)
         return table
-
-    # -------------------- IPO Info --------------------
-    def update_ipo_info(self, event=None):
-        ipo_name = self.ipo_choice.get()
-        data = {"price": 100, "available_shares": 5000, "status": "Open"}
-        self.ipo_info.config(text=f"IPO: {ipo_name} | Price: ₹{data['price']} | Available Shares: {data['available_shares']} | Status: {data['status']}")
 
     # -------------------- Functionalities --------------------
     def apply_ipo(self):
         try:
             inv_id = int(self.entry_id.get())
-            name = self.entry_name.get().strip()
+            name = self.entry_name.get()
             ipo = self.ipo_choice.get()
-            shares = int(self.entry_shares.get())
+            shares = int(self.entry_shares.get()) * 50
 
-            if shares <= 0:
-                messagebox.showerror("Error", "Shares must be >0")
-                return
-
-            # Duplicate check
-            existing_ids = [inv.id for inv in self.queue.get_all()] + \
-                           [a.id for a in self.allottees.get_all()] + \
-                           [r.id for r in self.rejected.get_all()]
-            if inv_id in existing_ids:
-                messagebox.showerror("Error", f"Investor ID {inv_id} already exists.")
-                return
-
-            # Auto-validation based on dummy available shares
-            available_shares = 5000
-            if shares <= available_shares:
-                investor = Investor(inv_id, name, ipo, shares)
-                self.allottees.add(investor)
-            else:
-                investor = Investor(inv_id, name, ipo, shares)
-                self.rejected.push(investor)
-
+            investor = Investor(inv_id, name, ipo, shares)
+            self.queue.enqueue(investor)
+            self.save_data()
+            messagebox.showinfo("Success", f"Application for {ipo} submitted by {name}.")
             self.refresh_tables()
-            messagebox.showinfo("Success", f"Application processed for {name} ({ipo})")
-
         except ValueError:
-            messagebox.showerror("Error", "Invalid numeric input")
+            messagebox.showerror("Error", "Please enter valid numeric inputs.")
 
     def process_all(self):
-        messagebox.showinfo("Info", "Applications are automatically processed upon submission.")
+        if self.queue.is_empty():
+            messagebox.showwarning("Empty", "No applications to process.")
+            return
+        while not self.queue.is_empty():
+            inv = self.queue.dequeue()
+            # 50% chance approve / reject
+            if random.random() < 0.5:
+                self.allottees.add(inv)
+            else:
+                self.rejected.push(inv)
+        self.save_data()
+        messagebox.showinfo("Done", "All applications processed!")
+        self.refresh_tables()
 
     def refresh_tables(self):
         for tbl in [self.table_queue, self.table_allot, self.table_reject]:
             for r in tbl.get_children(): tbl.delete(r)
+        for q in self.queue.get_all():
+            self.table_queue.insert('', 'end', values=(q.id, q.name, q.ipo, q.shares))
         for a in self.allottees.get_all():
-            self.table_allot.insert("", "end", values=(a.id, a.name, a.ipo, a.shares), tags=("row_color",))
+            self.table_allot.insert('', 'end', values=(a.id, a.name, a.ipo, a.shares))
         for r in self.rejected.get_all():
-            self.table_reject.insert("", "end", values=(r.id, r.name, r.ipo, r.shares), tags=("row_color",))
+            self.table_reject.insert('', 'end', values=(r.id, r.name, r.ipo, r.shares))
 
     def reset_all(self):
         self.queue = Queue()
         self.rejected = Stack()
         self.allottees = LinkedList()
+        self.save_data()
         self.refresh_tables()
-        messagebox.showinfo("Reset", "All data cleared!")
+        messagebox.showinfo("Reset", "All data cleared successfully!")
 
-    def export_csv(self):
-        try:
-            filename = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV Files","*.csv")])
-            if not filename: return
-            with open(filename, "w", newline="") as file:
-                writer = csv.writer(file)
-                writer.writerow(["ID","Name","IPO","Shares","Status"])
-                for a in self.allottees.get_all():
-                    writer.writerow([a.id, a.name, a.ipo, a.shares, "Allotted"])
-                for r in self.rejected.get_all():
-                    writer.writerow([r.id, r.name, r.ipo, r.shares, "Rejected"])
-            messagebox.showinfo("Export", f"Data exported to {filename}")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to export CSV: {str(e)}")
+    # -------------------- AI Assistant --------------------
+    def ai_response(self):
+        user_input = self.ai_box.get('1.0', tk.END).strip()
+        if not user_input: return
+        response = f"AI Tip: Choose IPO wisely. Currently, {len(self.ipo_list)} IPOs are available."
+        self.ai_box.insert(tk.END, f"\nUser: {user_input}\n{response}\n")
+        self.ai_box.see(tk.END)
 
-# -------------------- Run App --------------------
+    # -------------------- Persistent Storage --------------------
+    def save_data(self):
+        self.save_list(self.queue.get_all(), 'queue.csv')
+        self.save_list(self.allottees.get_all(), 'allottees.csv')
+        self.save_list(self.rejected.get_all(), 'rejected.csv')
+
+    def load_data(self):
+        for inv in self.load_list('queue.csv'): self.queue.enqueue(inv)
+        for inv in self.load_list('allottees.csv'): self.allottees.add(inv)
+        for inv in self.load_list('rejected.csv'): self.rejected.push(inv)
+
+    def save_list(self, lst, filename):
+        with open(filename, 'w', newline='') as f:
+            writer = csv.writer(f)
+            for inv in lst:
+                writer.writerow([inv.id, inv.name, inv.ipo, inv.shares])
+
+    def load_list(self, filename):
+        lst = []
+        if os.path.exists(filename):
+            with open(filename, 'r') as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    if len(row) == 4:
+                        lst.append(Investor(int(row[0]), row[1], row[2], int(row[3])))
+        return lst
+
+# -------------------- Run --------------------
 if __name__ == "__main__":
     root = tk.Tk()
-    app = IPOAppAutoValidation(root)
+    app = IPOApp(root)
     root.mainloop()
-    
